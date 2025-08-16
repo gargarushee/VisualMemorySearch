@@ -62,61 +62,74 @@ async def upload_screenshots(files: List[UploadFile] = File(...)):
     processed_count = 0
     failed_count = 0
     
+    # Validate and save files first
+    saved_files = []
+    for file in files:
+        try:
+            # Validate file type
+            if not file.filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+                continue
+            
+            # Save file immediately
+            file_path = await file_manager.save_screenshot(file)
+            saved_files.append({
+                'filename': file.filename,
+                'file_path': file_path,
+                'screenshot_id': str(uuid.uuid4())
+            })
+        except Exception as e:
+            print(f"Error saving {file.filename}: {str(e)}")
+            continue
+    
+    if not saved_files:
+        raise HTTPException(status_code=400, detail="No valid image files uploaded")
+    
     # Initialize job status
     processing_jobs[job_id] = {
         "status": "processing",
         "progress": 0,
-        "total": len(files),
+        "total": len(saved_files),
         "processed_files": []
     }
     
     # Store job in database
-    db_manager.create_processing_job(job_id, len(files))
+    db_manager.create_processing_job(job_id, len(saved_files))
     
-    # Process files in background
-    asyncio.create_task(process_files_background(job_id, files))
+    # Process saved files in background
+    asyncio.create_task(process_saved_files_background(job_id, saved_files))
     
     return UploadResponse(
-        message=f"Started processing {len(files)} screenshots",
+        message=f"Started processing {len(saved_files)} screenshots",
         processed_count=0,
         failed_count=0,
         job_id=job_id
     )
 
-async def process_files_background(job_id: str, files: List[UploadFile]):
-    """Process uploaded files in the background."""
+async def process_saved_files_background(job_id: str, saved_files: List[dict]):
+    """Process already saved files in the background."""
     processed_count = 0
     failed_count = 0
     
-    for i, file in enumerate(files):
+    for i, file_info in enumerate(saved_files):
         try:
-            # Validate file type
-            if not file.filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-                failed_count += 1
-                continue
-            
-            # Save file
-            file_path = await file_manager.save_screenshot(file)
-            screenshot_id = str(uuid.uuid4())
-            
             # Store initial record
             db_manager.create_screenshot(
-                screenshot_id=screenshot_id,
-                filename=file.filename,
-                file_path=file_path
+                screenshot_id=file_info['screenshot_id'],
+                filename=file_info['filename'],
+                file_path=file_info['file_path']
             )
             
             # Process image (OCR + visual description)
             try:
-                ocr_text = image_processor.extract_text(file_path)
-                visual_description = await image_processor.generate_description(file_path)
+                ocr_text = image_processor.extract_text(file_info['file_path'])
+                visual_description = await image_processor.generate_description(file_info['file_path'])
                 
                 # Create embeddings
                 text_embedding = image_processor.create_embeddings(f"{ocr_text} {visual_description}")
                 
                 # Update record with processed data
                 db_manager.update_screenshot_processing(
-                    screenshot_id=screenshot_id,
+                    screenshot_id=file_info['screenshot_id'],
                     ocr_text=ocr_text,
                     visual_description=visual_description,
                     text_embedding=text_embedding
@@ -125,11 +138,11 @@ async def process_files_background(job_id: str, files: List[UploadFile]):
                 processed_count += 1
                 
             except Exception as e:
-                print(f"Error processing {file.filename}: {str(e)}")
+                print(f"Error processing {file_info['filename']}: {str(e)}")
                 failed_count += 1
                 
         except Exception as e:
-            print(f"Error handling file {file.filename}: {str(e)}")
+            print(f"Error handling file {file_info['filename']}: {str(e)}")
             failed_count += 1
         
         # Update progress
