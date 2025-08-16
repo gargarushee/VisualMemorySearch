@@ -69,7 +69,7 @@ class SearchService:
             'general_visual': ['picture', 'photo', 'image', 'show', 'display', 'view']
         }
         
-        ui_keywords = ['button', 'form', 'login', 'error', 'dialog', 'menu', 'interface', 'screen', 'app', 'website', 'page']
+        ui_keywords = ['button', 'form', 'login', 'error', 'dialog', 'menu', 'interface', 'screen', 'app', 'website', 'page', 'modal', 'field', 'dropdown', 'checkbox', 'click']
         
         # Special high-priority combinations
         auth_error_keywords = ['auth', 'authentication', 'login', 'password', 'sign in', 'credential', 'username']
@@ -197,32 +197,45 @@ class SearchService:
         visual_description = screenshot.get('visual_description', '').lower()
         combined_text = f"{ocr_text} {visual_description}"
         
+        # Define irrelevant content patterns
+        nature_patterns = ['landscape', 'mountain', 'river', 'scenic', 'photograph', 'nature', 'outdoor', 'sunset', 'sunrise', 'valley', 'peak', 'hill', 'forest', 'tree']
+        character_patterns = ['panda', 'cartoon', 'cute', 'kawaii', 'character', 'illustration', 'animal']
+        irrelevant_patterns = nature_patterns + character_patterns
+        
         if query_analysis['is_auth_error_query']:
-            # For auth/error queries, require either:
-            # 1. Actual auth/error terms in the content, OR
-            # 2. Very high similarity score (>0.7)
+            # For auth/error queries, require actual auth/error terms
             has_auth_content = any(term in combined_text for term in ['auth', 'authentication', 'login', 'password', 'sign in', 'username', 'credential'])
             has_error_content = any(term in combined_text for term in ['error', 'failed', 'warning', 'alert', 'problem', 'invalid'])
             
-            # If it has relevant auth/error content, lower threshold
             if has_auth_content or has_error_content:
                 return 0.2
-            # If it's clearly non-UI content, very high threshold
-            elif any(term in combined_text for term in ['landscape', 'mountain', 'panda', 'cartoon', 'cute', 'kawaii', 'scenic', 'photograph']):
-                return 0.9  # Nearly impossible threshold for irrelevant content
+            elif any(pattern in combined_text for pattern in irrelevant_patterns):
+                return 0.95  # Nearly impossible threshold
             else:
-                return 0.6  # Higher threshold for general content
+                return 0.6
+        
+        elif query_analysis['is_ui_query'] or any(ui_term in query_analysis['query_lower'] for ui_term in ['button', 'form', 'interface', 'menu', 'dialog', 'modal']):
+            # For UI queries (like "blue button"), require actual UI content
+            has_ui_content = any(term in combined_text for term in ['button', 'form', 'interface', 'menu', 'dialog', 'modal', 'click', 'field', 'dropdown', 'checkbox', 'ui elements', 'sign in', 'login'])
+            
+            if has_ui_content:
+                return 0.2  # Low threshold for actual UI content
+            elif any(pattern in combined_text for pattern in irrelevant_patterns):
+                return 0.95  # Nearly impossible threshold for nature/character images
+            else:
+                return 0.7  # High threshold for non-UI content
         
         elif query_analysis['is_visual_query']:
-            # For visual queries, exclude UI-heavy screenshots
-            ui_indicators = ['button', 'form', 'login', 'interface', 'dialog', 'menu']
-            if any(term in combined_text for term in ui_indicators) and len(ocr_text) > 50:
-                return 0.8  # High threshold for UI content on visual queries
+            # For nature/landscape queries, exclude UI screenshots
+            has_ui_content = any(term in combined_text for term in ['button', 'form', 'login', 'interface', 'dialog', 'menu']) and len(ocr_text) > 20
+            
+            if has_ui_content:
+                return 0.8  # High threshold for UI content on nature queries
             else:
                 return 0.1  # Normal threshold for visual content
         
         else:
-            return 0.1  # Default threshold
+            return 0.2  # Default threshold
     
     def _calculate_content_relevance(self, query_analysis: Dict, screenshot_analysis: Dict, ocr_text: str, visual_description: str) -> float:
         """Calculate how well screenshot content matches query intent."""
@@ -255,6 +268,30 @@ class SearchService:
                 score = 0.0  # Zero out completely irrelevant content
             
             return min(score, 1.5)  # Cap at 1.5 for exceptional matches
+        
+        elif query_analysis['is_ui_query'] or any(ui_term in query_analysis['query_lower'] for ui_term in ['button', 'form', 'interface', 'menu', 'dialog', 'modal']):
+            # For UI-focused queries, heavily reward UI content and penalize nature content
+            score = 0.0
+            combined_text = f"{ocr_text} {visual_description}".lower()
+            
+            # Reward UI content
+            ui_terms = ['button', 'form', 'interface', 'menu', 'dialog', 'modal', 'click', 'field', 'dropdown', 'checkbox', 'ui elements']
+            ui_found = any(term in combined_text for term in ui_terms)
+            
+            if ui_found:
+                score += 0.8
+                # Bonus for specific query terms
+                query_words = query_analysis['query_lower'].split()
+                for word in query_words:
+                    if word in combined_text:
+                        score += 0.3
+            
+            # Heavy penalty for nature/landscape content
+            nature_terms = ['landscape', 'mountain', 'scenic', 'photograph', 'nature', 'outdoor', 'panda', 'cartoon', 'character']
+            if any(term in combined_text for term in nature_terms):
+                score = 0.0  # Zero out nature content for UI queries
+            
+            return min(score, 1.5)
         
         elif query_analysis['is_visual_query']:
             # For visual queries, heavily penalize UI-heavy screenshots
