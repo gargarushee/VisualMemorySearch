@@ -293,11 +293,17 @@ class VisualMemorySearch {
                 <div class="result-text">
                     <div class="text-section">
                         <h5><i data-feather="type"></i> OCR Text</h5>
-                        <p>${this.truncateText(result.ocr_text || 'No text detected', 150)}</p>
+                        <div class="text-content collapsed" data-full-text="${this.escapeHtml(result.ocr_text || 'No text detected')}">
+                            <p>${this.truncateText(result.ocr_text || 'No text detected', 100)}</p>
+                            ${(result.ocr_text && result.ocr_text.length > 100) ? '<button class="expand-btn" onclick="app.toggleTextSection(this)">Read more</button>' : ''}
+                        </div>
                     </div>
                     <div class="text-section">
                         <h5><i data-feather="eye"></i> Visual Description</h5>
-                        <p>${this.truncateText(result.visual_description || 'No description available', 150)}</p>
+                        <div class="text-content collapsed" data-full-text="${this.escapeHtml(result.visual_description || 'No description available')}">
+                            <p>${this.truncateText(result.visual_description || 'No description available', 100)}</p>
+                            ${(result.visual_description && result.visual_description.length > 100) ? '<button class="expand-btn" onclick="app.toggleTextSection(this)">Read more</button>' : ''}
+                        </div>
                     </div>
                 </div>
             </div>
@@ -391,6 +397,32 @@ class VisualMemorySearch {
             console.error('Delete error:', error);
             this.showMessage(`Failed to delete screenshot: ${error.message}`, 'error');
         }
+    }
+
+    toggleTextSection(button) {
+        const textContent = button.parentElement;
+        const paragraph = textContent.querySelector('p');
+        const fullText = textContent.dataset.fullText;
+        
+        if (textContent.classList.contains('collapsed')) {
+            // Expand
+            textContent.classList.remove('collapsed');
+            textContent.classList.add('expanded');
+            paragraph.textContent = fullText;
+            button.textContent = 'Read less';
+        } else {
+            // Collapse
+            textContent.classList.remove('expanded');
+            textContent.classList.add('collapsed');
+            paragraph.textContent = this.truncateText(fullText, 100);
+            button.textContent = 'Read more';
+        }
+    }
+    
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 
     showMessage(message, type = 'info') {

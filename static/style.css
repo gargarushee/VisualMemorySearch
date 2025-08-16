@@ -32,6 +32,24 @@ body {
     gap: 0.5rem;
 }
 
+.search-mascot {
+    font-size: 2rem;
+    animation: bounce 2s infinite;
+    display: inline-block;
+}
+
+@keyframes bounce {
+    0%, 20%, 50%, 80%, 100% {
+        transform: translateY(0);
+    }
+    40% {
+        transform: translateY(-10px);
+    }
+    60% {
+        transform: translateY(-5px);
+    }
+}
+
 .header p {
     color: rgba(255, 255, 255, 0.8);
     font-size: 1.2rem;
@@ -323,6 +341,12 @@ section {
     color: #555;
     font-size: 0.9rem;
     margin-bottom: 0.5rem;
+    cursor: pointer;
+    transition: color 0.2s ease;
+}
+
+.text-section h5:hover {
+    color: #667eea;
 }
 
 .text-section h5 svg {
@@ -330,10 +354,40 @@ section {
     height: 16px;
 }
 
+.text-content {
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+}
+
+.text-content.collapsed {
+    max-height: 60px;
+}
+
+.text-content.expanded {
+    max-height: none;
+}
+
 .text-section p {
     color: #666;
-    font-size: 0.9rem;
-    line-height: 1.5;
+    font-size: 0.85rem;
+    line-height: 1.4;
+    margin: 0;
+}
+
+.expand-btn {
+    background: none;
+    border: none;
+    color: #667eea;
+    font-size: 0.8rem;
+    cursor: pointer;
+    padding: 0.25rem 0;
+    margin-top: 0.25rem;
+    text-decoration: underline;
+    transition: color 0.2s ease;
+}
+
+.expand-btn:hover {
+    color: #764ba2;
 }
 
 /* Library section */
@@ -573,6 +627,10 @@ section {
     
     .header h1 {
         font-size: 2rem;
+    }
+    
+    .search-mascot {
+        font-size: 1.5rem;
     }
     
     .result-card {
