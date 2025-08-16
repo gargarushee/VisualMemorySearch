@@ -122,7 +122,20 @@ Keep the description concise but detailed enough for search purposes."""
                 ]
             )
             
-            return message.content[0].text.strip()
+            # Handle Claude API response properly
+            try:
+                # Extract text content from the response
+                content = message.content[0]
+                if hasattr(content, 'text'):
+                    return content.text.strip()
+                elif hasattr(content, 'content'):
+                    return str(content.content).strip()
+                else:
+                    # Convert response to string as fallback
+                    return str(content).strip()
+            except (IndexError, AttributeError) as e:
+                print(f"Error parsing Claude response: {e}")
+                return "Error: Could not parse visual description response"
         
         except Exception as e:
             print(f"Error generating description for {image_path}: {str(e)}")
