@@ -401,23 +401,39 @@ class VisualMemorySearch {
     }
 
     async deleteScreenshot(screenshotId, filename) {
+        if (!screenshotId || screenshotId === 'undefined') {
+            this.showMessage('Invalid screenshot ID', 'error');
+            return;
+        }
+
         try {
             const response = await fetch(`/api/screenshots/${screenshotId}`, {
                 method: 'DELETE'
             });
             
-            const result = await response.json();
-            
             if (response.ok) {
+                const result = await response.json();
                 this.showMessage('Screenshot deleted successfully', 'success');
                 // Refresh the library to remove the deleted item
                 this.loadLibrary();
             } else {
-                throw new Error(result.detail || 'Delete failed');
+                // Try to get error details, but handle cases where response isn't JSON
+                let errorMessage = 'Delete failed';
+                try {
+                    const result = await response.json();
+                    errorMessage = result.detail || errorMessage;
+                } catch (jsonError) {
+                    errorMessage = `Delete failed (${response.status})`;
+                }
+                this.showMessage(`Failed to delete screenshot: ${errorMessage}`, 'error');
             }
         } catch (error) {
-            console.error('Delete error:', error);
-            this.showMessage(`Failed to delete screenshot: ${error.message}`, 'error');
+            // More specific error handling for different types of errors
+            if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                this.showMessage('Network error: Unable to connect to server', 'error');
+            } else {
+                this.showMessage(`Failed to delete screenshot: ${error.message}`, 'error');
+            }
         }
     }
 

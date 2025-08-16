@@ -93,6 +93,22 @@ async def health_check():
         status_code=200
     )
 
+@app.get("/ready")
+async def readiness_check():
+    """Readiness check endpoint for deployment systems."""
+    try:
+        # Quick database connectivity check
+        db_manager.get_all_processed_screenshots()
+        return JSONResponse(
+            content={"status": "ready", "service": "Visual Memory Search", "database": "connected"},
+            status_code=200
+        )
+    except Exception as e:
+        return JSONResponse(
+            content={"status": "not_ready", "service": "Visual Memory Search", "error": str(e)},
+            status_code=503
+        )
+
 @app.post("/api/screenshots/upload", response_model=UploadResponse)
 async def upload_screenshots(files: List[UploadFile] = File(...)):
     """Upload and process screenshot files."""
@@ -259,20 +275,31 @@ async def get_all_screenshots():
 @app.delete("/api/screenshots/{screenshot_id}")
 async def delete_screenshot(screenshot_id: str):
     """Delete a screenshot by ID."""
+    # Validate screenshot_id format
+    if not screenshot_id or screenshot_id.strip() == "":
+        raise HTTPException(status_code=400, detail="Invalid screenshot ID")
+    
     try:
         # Get screenshot info before deletion
         screenshot = db_manager.get_screenshot_by_id(screenshot_id)
         if not screenshot:
             raise HTTPException(status_code=404, detail="Screenshot not found")
         
-        # Delete file from filesystem
-        file_manager.delete_file(screenshot["file_path"])
+        # Delete file from filesystem (with error handling)
+        try:
+            file_manager.delete_file(screenshot["file_path"])
+        except Exception as file_error:
+            print(f"Warning: Could not delete file {screenshot['file_path']}: {str(file_error)}")
+            # Continue with database deletion even if file deletion fails
         
         # Delete from database
         db_manager.delete_screenshot(screenshot_id)
         
         return {"message": "Screenshot deleted successfully", "id": screenshot_id}
         
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 404)
+        raise
     except Exception as e:
         print(f"Error deleting screenshot {screenshot_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to delete screenshot: {str(e)}")
