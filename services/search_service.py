@@ -32,8 +32,14 @@ class SearchService:
                     query, query_analysis, screenshot, query_embedding
                 )
                 
-                # Apply stricter filtering - only include more relevant results
-                min_threshold = 0.15 if query_analysis['is_visual_query'] else 0.1
+                # Apply adaptive filtering based on query complexity
+                if query_analysis['is_visual_query']:
+                    # Lower threshold for multi-word visual queries to capture more relevant results
+                    query_words = len([w for w in query.split() if len(w) > 2])
+                    min_threshold = 0.08 if query_words > 1 else 0.12  # 8% for multi-word, 12% for single word
+                else:
+                    min_threshold = 0.1
+                
                 if score > min_threshold:
                     result = SearchResult(
                         id=screenshot['id'],

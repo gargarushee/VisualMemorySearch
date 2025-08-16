@@ -127,7 +127,12 @@ Keep the description concise but detailed enough for search purposes."""
                     }]
                 }])
 
-            return message["content"][0]['text'].strip()
+            # Handle different content block types from Anthropic API
+            if hasattr(message.content[0], 'text'):
+                return message.content[0].text.strip()
+            else:
+                # Fallback for other content types
+                return str(message.content[0]).strip()
 
         except Exception as e:
             print(f"Error generating description for {image_path}: {str(e)}")
