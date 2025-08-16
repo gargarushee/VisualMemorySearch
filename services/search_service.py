@@ -32,7 +32,9 @@ class SearchService:
                     query, query_analysis, screenshot, query_embedding
                 )
                 
-                if score > 0.1:  # Only include reasonably relevant results
+                # Apply stricter filtering - only include more relevant results
+                min_threshold = 0.15 if query_analysis['is_visual_query'] else 0.1
+                if score > min_threshold:
                     result = SearchResult(
                         id=screenshot['id'],
                         filename=screenshot['filename'],
@@ -113,10 +115,14 @@ class SearchService:
         visual_description = screenshot.get('visual_description', '').lower()
         filename = screenshot.get('filename', '').lower()
         
-        # Base similarity score
+        # Base similarity score with filename context enhancement
         base_score = self.image_processor.calculate_similarity(
             query_embedding, screenshot['text_embedding']
         )
+        
+        # Enhance base score if filename strongly suggests relevance
+        if self._has_strong_filename_relevance(query_analysis['query_lower'], filename):
+            base_score = min(base_score + 0.2, 1.0)
         
         # Determine content type of screenshot
         screenshot_analysis = self._analyze_screenshot_content(ocr_text, visual_description, filename)
@@ -136,6 +142,14 @@ class SearchService:
             query_analysis['query_lower'], filename, query_analysis
         )
         
+        # Apply early filtering for obviously irrelevant results
+        generic_patterns = ['download', 'screenshot', 'image', 'photo', 'untitled']
+        is_generic_file = any(pattern in filename for pattern in generic_patterns)
+        
+        # If it's a generic file with very low content relevance, return minimal score
+        if is_generic_file and content_score < 0.2 and filename_score < 0.1:
+            return 0.05
+        
         # Weighted final score based on query type
         if query_analysis['is_auth_error_query']:
             # Special handling for auth+error queries - prioritize text content
@@ -149,9 +163,9 @@ class SearchService:
             # For visual queries, prioritize visual content and filename heavily
             final_score = (
                 base_score * 0.15 +          # Lower weight for general similarity
-                content_score * 0.5 +         # High weight for visual content relevance
+                content_score * 0.45 +       # High weight for visual content relevance
                 text_score * 0.15 +          # Lower weight for text matching
-                filename_score * 0.2         # Higher weight for filename matching
+                filename_score * 0.25        # Higher weight for filename matching in visual queries
             )
         else:
             # For text queries, balance all factors
@@ -228,50 +242,61 @@ class SearchService:
             return max(score, 0.0)
         
         elif query_analysis['is_visual_query']:
-            # For visual queries, heavily penalize UI-heavy screenshots
+            # For visual queries, heavily penalize UI-heavy screenshots and generic files
             if screenshot_analysis['is_primarily_ui']:
                 return 0.1  # Very low score for UI content on visual queries
             
+            # Heavy penalty for generic filenames that don't match visual content
+            generic_patterns = ['download', 'screenshot', 'image', 'photo', 'untitled']
+            is_generic_file = any(pattern in filename for pattern in generic_patterns)
+            if is_generic_file:
+                # Only allow generic files if they have strong visual content matches
+                has_strong_visual_match = False
+                for term in query_analysis['content_terms']:
+                    if term in visual_description:
+                        has_strong_visual_match = True
+                        break
+                if not has_strong_visual_match:
+                    return 0.05  # Very low score for generic files without content match
+            
             # Reward visual content matches
             score = 0.0
+            content_match_found = False
             
-            # Check for specific content matches
-            if 'nature' in query_analysis['visual_categories']:
-                if screenshot_analysis['has_nature_content']:
+            # Check for specific content matches with enhanced scoring
+            for category in query_analysis['visual_categories']:
+                if category == 'nature' and screenshot_analysis['has_nature_content']:
                     score += 0.8
-                    # Specific nature term bonuses
-                    for term in query_analysis['content_terms']:
-                        if term in visual_description:
-                            score += 0.4
-                        elif term in ocr_text:
-                            score += 0.1  # Much lower for text matches
-                else:
-                    return 0.2  # Low score if no nature content for nature query
-            
-            if 'urban' in query_analysis['visual_categories']:
-                if screenshot_analysis['has_urban_content']:
+                    content_match_found = True
+                    
+                elif category == 'urban' and screenshot_analysis['has_urban_content']:
                     score += 0.8
-                    for term in query_analysis['content_terms']:
-                        if term in visual_description:
-                            score += 0.4
-            
-            if 'people' in query_analysis['visual_categories']:
-                if screenshot_analysis['has_people_content']:
+                    content_match_found = True
+                    
+                elif category == 'people' and screenshot_analysis['has_people_content']:
                     score += 0.8
-            
-            # NEW: Handle animated content specifically
-            if 'animated' in query_analysis['visual_categories']:
-                if screenshot_analysis['has_animated_content']:
+                    content_match_found = True
+                    
+                elif category == 'animated' and screenshot_analysis['has_animated_content']:
                     score += 0.9  # High score for animated content
-                    # Extra bonus for specific animated terms in filename
-                    for term in query_analysis['content_terms']:
-                        if term in filename:
-                            score += 0.3
-                        elif term in visual_description:
-                            score += 0.4
-                else:
-                    # Lower penalty for non-animated content when looking for animations
-                    return 0.3
+                    content_match_found = True
+                    # Extra bonus for descriptive filenames with animated terms
+                    descriptive_filename_words = [w for w in filename.replace('_', ' ').replace('-', ' ').split() if len(w) > 2]
+                    if len(descriptive_filename_words) >= 2:  # More descriptive filename
+                        score += 0.2
+            
+            # Bonus for matching specific content terms
+            for term in query_analysis['content_terms']:
+                if term in visual_description:
+                    score += 0.4
+                elif term in filename.lower():
+                    score += 0.3  # Filename matches are valuable for visual queries
+                elif term in ocr_text:
+                    score += 0.1  # Much lower for text matches
+            
+            # If no content match found, return very low score
+            if not content_match_found and score < 0.3:
+                return 0.15
             
             return min(score, 1.0)
         
@@ -334,6 +359,69 @@ class SearchService:
                 matched_elements.append(f"Filename match: {word}")
         
         return matched_elements[:5] if matched_elements else ["General content match"]
+    
+    def _calculate_filename_matching(self, query_lower: str, filename: str, query_analysis: Dict) -> float:
+        """Calculate filename-based matching score with semantic understanding."""
+        score = 0.0
+        
+        # Skip generic filenames that are never relevant
+        generic_patterns = ['download', 'screenshot', 'image', 'photo', 'untitled', 'img_', 'dsc_']
+        if any(pattern in filename for pattern in generic_patterns):
+            return 0.05  # Very low score for generic files
+        
+        # Direct filename matches
+        query_words = [w for w in query_lower.split() if len(w) > 2]
+        filename_words = [w for w in filename.replace('_', ' ').replace('-', ' ').replace('.', ' ').split() if len(w) > 2]
+        
+        # Exact phrase match in filename
+        if query_lower.replace(' ', '') in filename.replace(' ', '').replace('_', '').replace('-', ''):
+            score += 0.8
+        
+        # Word-by-word matching with context understanding
+        matched_words = 0
+        for query_word in query_words:
+            for filename_word in filename_words:
+                # Exact match
+                if query_word == filename_word:
+                    matched_words += 1
+                    score += 0.4
+                # Partial match (substring)
+                elif query_word in filename_word or filename_word in query_word:
+                    matched_words += 0.5
+                    score += 0.2
+        
+        # Bonus for high match ratio
+        if query_words and matched_words / len(query_words) > 0.5:
+            score += 0.3
+        
+        # Semantic filename matching
+        if query_analysis.get('is_visual_query', False):
+            # For visual queries, prefer descriptive filenames over generic ones
+            descriptive_words = len([w for w in filename_words if len(w) > 3 and w not in generic_patterns])
+            if descriptive_words >= 2:
+                score += 0.2
+        
+        return min(score, 1.0)
+    
+    def _has_strong_filename_relevance(self, query_lower: str, filename: str) -> bool:
+        """Check if filename strongly suggests relevance to query."""
+        # Remove extensions and normalize
+        clean_filename = filename.lower().replace('.jpeg', '').replace('.jpg', '').replace('.png', '')
+        
+        # Strong relevance indicators
+        query_words = [w for w in query_lower.split() if len(w) > 2]
+        filename_words = [w for w in clean_filename.replace('_', ' ').replace('-', ' ').split() if len(w) > 2]
+        
+        # Check for exact or partial matches
+        matches = 0
+        for query_word in query_words:
+            for filename_word in filename_words:
+                if query_word == filename_word or query_word in filename_word or filename_word in query_word:
+                    matches += 1
+                    break
+        
+        # Strong relevance if most query words match filename words
+        return len(query_words) > 0 and matches / len(query_words) >= 0.5
     
     def search_by_text(self, query: str, limit: int = 5) -> List[SearchResult]:
         """Search by text content only."""
