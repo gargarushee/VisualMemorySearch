@@ -204,7 +204,7 @@ class VisualMemorySearch {
         // Update header
         resultsTitle.textContent = `Search Results for "${query}"`;
         resultsMeta.innerHTML = `
-            <span>${result.results.length} results found</span>
+            <span>Top ${result.results.length} results found</span>
             <span>•</span>
             <span>Searched ${result.total_searched} screenshots</span>
             <span>•</span>
