@@ -58,7 +58,8 @@ class VisualMemorySearch {
             btn.addEventListener('click', (e) => {
                 const query = e.target.dataset.query;
                 searchInput.value = query;
-                this.performSearch();
+                // Focus on search input for better UX
+                searchInput.focus();
             });
         });
 
@@ -247,7 +248,7 @@ class VisualMemorySearch {
             libraryGrid.innerHTML = `
                 <div class="empty-library">
                     <i data-feather="image" class="empty-icon"></i>
-                    <h3>No screenshots yet</h3>
+                    <h4>No screenshots</h4>
                     <p>Upload some screenshots to start searching</p>
                 </div>
             `;
