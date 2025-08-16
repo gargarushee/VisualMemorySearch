@@ -66,17 +66,34 @@ async def initialize_database_async():
 
 @app.get("/")
 async def root():
-    """Lightweight health check for deployment."""
-    # Always return immediate health response for deployment checks
-    return JSONResponse(
-        content={
-            "status": "healthy", 
-            "service": "Visual Memory Search", 
-            "version": "1.0.0",
-            "timestamp": time.time()
-        },
-        status_code=200
-    )
+    """Serve the main application with fast health check fallback."""
+    try:
+        # Check if static/index.html exists and serve it
+        if os.path.exists("static/index.html"):
+            return FileResponse("static/index.html")
+        else:
+            # Fallback to health response if static files missing
+            return JSONResponse(
+                content={
+                    "status": "healthy", 
+                    "service": "Visual Memory Search", 
+                    "version": "1.0.0",
+                    "message": "Frontend files not found"
+                },
+                status_code=200
+            )
+    except Exception as e:
+        print(f"Error serving root: {str(e)}")
+        # Return health response on any error
+        return JSONResponse(
+            content={
+                "status": "healthy", 
+                "service": "Visual Memory Search", 
+                "version": "1.0.0",
+                "message": "Service running with fallback response"
+            },
+            status_code=200
+        )
 
 @app.get("/app")
 async def serve_app():
