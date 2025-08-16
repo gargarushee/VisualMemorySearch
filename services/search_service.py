@@ -45,7 +45,7 @@ class SearchService:
                 combined_text = f"{ocr_text} {visual_description}".lower()
                 
                 if query_lower in combined_text:
-                    final_score += 0.5  # Major boost for exact query match
+                    final_score += 0.6  # Major boost for exact query match
                 
                 # Boost for multi-word phrase matches
                 query_words = query_lower.split()
@@ -53,7 +53,23 @@ class SearchService:
                     for i in range(len(query_words) - 1):
                         phrase = ' '.join(query_words[i:i+2])
                         if phrase in combined_text:
-                            final_score += 0.3  # Good boost for phrase match
+                            final_score += 0.4  # Good boost for phrase match
+                
+                # Special boost for authentication-related queries
+                auth_terms = ['auth', 'authentication', 'login', 'sign in', 'password', 'credential']
+                error_terms = ['error', 'warning', 'alert', 'problem', 'issue', 'fail']
+                
+                auth_in_query = any(term in query_lower for term in auth_terms)
+                error_in_query = any(term in query_lower for term in error_terms)
+                
+                if auth_in_query and error_in_query:
+                    # Super high boost for error + auth combinations
+                    auth_count = sum(1 for term in auth_terms if term in combined_text)
+                    error_count = sum(1 for term in error_terms if term in combined_text)
+                    if auth_count > 0 and error_count > 0:
+                        final_score += 0.8  # Very high boost for error+auth combo
+                    elif auth_count > 0 or error_count > 0:
+                        final_score += 0.5  # Good boost for partial match
                 
                 # Special boost for UI element + color combinations
                 if 'blue' in query_lower and 'button' in query_lower:
