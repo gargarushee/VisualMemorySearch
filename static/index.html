@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visual Memory Search</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/feather-icons/4.29.0/feather.min.css" rel="stylesheet">
+    <script src="https://unpkg.com/feather-icons"></script>
+</head>
+<body>
+    <div id="app">
+        <header class="header">
+            <h1><i data-feather="search"></i> Visual Memory Search</h1>
+            <p>Search your screenshot history using natural language queries</p>
+        </header>
+
+        <main class="main-content">
+            <!-- Upload Section -->
+            <section class="upload-section">
+                <div class="upload-zone" id="uploadZone">
+                    <div class="upload-content">
+                        <i data-feather="upload-cloud" class="upload-icon"></i>
+                        <h3>Drag & drop screenshots here</h3>
+                        <p>or <button class="browse-btn" id="browseBtn">browse files</button></p>
+                        <small>Supports PNG, JPG, JPEG formats</small>
+                    </div>
+                    <input type="file" id="fileInput" multiple accept=".png,.jpg,.jpeg" hidden>
+                </div>
+                
+                <div class="progress-container" id="progressContainer" style="display: none;">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <div class="progress-text" id="progressText">Processing files...</div>
+                </div>
+            </section>
+
+            <!-- Search Section -->
+            <section class="search-section">
+                <div class="search-container">
+                    <div class="search-input-container">
+                        <i data-feather="search" class="search-icon"></i>
+                        <input 
+                            type="text" 
+                            id="searchInput" 
+                            placeholder="Search your screenshots... e.g., 'error message about auth' or 'screenshot with blue button'"
+                            class="search-input"
+                        >
+                        <button id="searchBtn" class="search-btn">Search</button>
+                    </div>
+                    <div class="search-examples">
+                        <span class="example-label">Examples:</span>
+                        <button class="example-query" data-query="error message about auth">error message about auth</button>
+                        <button class="example-query" data-query="screenshot with blue button">blue button</button>
+                        <button class="example-query" data-query="login form">login form</button>
+                        <button class="example-query" data-query="dialog with cancel button">cancel dialog</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Results Section -->
+            <section class="results-section" id="resultsSection" style="display: none;">
+                <div class="results-header">
+                    <h3 id="resultsTitle">Search Results</h3>
+                    <div class="results-meta" id="resultsMeta"></div>
+                </div>
+                <div class="results-grid" id="resultsGrid">
+                    <!-- Results will be populated here -->
+                </div>
+            </section>
+
+            <!-- Screenshots Library -->
+            <section class="library-section">
+                <div class="library-header">
+                    <h3><i data-feather="image"></i> Screenshot Library</h3>
+                    <button id="refreshLibrary" class="refresh-btn">
+                        <i data-feather="refresh-cw"></i> Refresh
+                    </button>
+                </div>
+                <div class="library-grid" id="libraryGrid">
+                    <!-- Library items will be populated here -->
+                </div>
+            </section>
+        </main>
+
+        <!-- Loading Modal -->
+        <div class="modal" id="loadingModal" style="display: none;">
+            <div class="modal-content">
+                <div class="loading-spinner"></div>
+                <p>Processing your query...</p>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+    <script>
+        // Initialize feather icons
+        feather.replace();
+    </script>
+</body>
+</html>
