@@ -347,3 +347,16 @@ async def delete_screenshot(screenshot_id: str):
         raise HTTPException(status_code=500, detail=f"Failed to delete screenshot: {str(e)}")
 
 # Application is started via uvicorn command in workflow configuration
+
+if __name__ == "__main__":
+    import uvicorn
+    import os
+    
+    # Production entry point for deployment
+    port = int(os.environ.get("PORT", 5000))
+    uvicorn.run(
+        app, 
+        host="0.0.0.0", 
+        port=port,
+        log_level="info"
+    )
