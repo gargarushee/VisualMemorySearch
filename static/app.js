@@ -318,6 +318,11 @@ class VisualMemorySearch {
                 <div class="status-badge ${statusClass}">
                     <i data-feather="${statusIcon}"></i>
                 </div>
+                <div class="library-actions">
+                    <button class="delete-btn" onclick="app.deleteScreenshot('${screenshot.id}', '${screenshot.filename}')" title="Delete screenshot">
+                        <i data-feather="trash-2"></i>
+                    </button>
+                </div>
             </div>
             <div class="library-info">
                 <h5>${screenshot.filename}</h5>
@@ -361,6 +366,32 @@ class VisualMemorySearch {
         modal.style.display = show ? 'flex' : 'none';
     }
 
+    async deleteScreenshot(screenshotId, filename) {
+        // Show confirmation dialog
+        if (!confirm(`Are you sure you want to delete "${filename}"? This action cannot be undone.`)) {
+            return;
+        }
+        
+        try {
+            const response = await fetch(`/api/screenshots/${screenshotId}`, {
+                method: 'DELETE'
+            });
+            
+            const result = await response.json();
+            
+            if (response.ok) {
+                this.showMessage('Screenshot deleted successfully', 'success');
+                // Refresh the library to remove the deleted item
+                this.loadLibrary();
+            } else {
+                throw new Error(result.detail || 'Delete failed');
+            }
+        } catch (error) {
+            console.error('Delete error:', error);
+            this.showMessage(`Failed to delete screenshot: ${error.message}`, 'error');
+        }
+    }
+
     showMessage(message, type = 'info') {
         // Create a simple toast notification
         const toast = document.createElement('div');
@@ -382,6 +413,7 @@ class VisualMemorySearch {
 }
 
 // Initialize app when DOM is loaded
+let app; // Global reference for delete function
 document.addEventListener('DOMContentLoaded', () => {
-    new VisualMemorySearch();
+    app = new VisualMemorySearch();
 });

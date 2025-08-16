@@ -215,5 +215,26 @@ async def get_all_screenshots():
         "total": len(screenshots)
     }
 
+@app.delete("/api/screenshots/{screenshot_id}")
+async def delete_screenshot(screenshot_id: str):
+    """Delete a screenshot by ID."""
+    try:
+        # Get screenshot info before deletion
+        screenshot = db_manager.get_screenshot_by_id(screenshot_id)
+        if not screenshot:
+            raise HTTPException(status_code=404, detail="Screenshot not found")
+        
+        # Delete file from filesystem
+        file_manager.delete_file(screenshot["file_path"])
+        
+        # Delete from database
+        db_manager.delete_screenshot(screenshot_id)
+        
+        return {"message": "Screenshot deleted successfully", "id": screenshot_id}
+        
+    except Exception as e:
+        print(f"Error deleting screenshot {screenshot_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to delete screenshot: {str(e)}")
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)

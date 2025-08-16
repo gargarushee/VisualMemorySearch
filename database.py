@@ -133,6 +133,32 @@ class DatabaseManager:
             return dict(row) if row else None
         finally:
             conn.close()
+    
+    def get_screenshot_by_id(self, screenshot_id: str) -> Optional[Dict[str, Any]]:
+        """Get screenshot by ID."""
+        conn = self.get_connection()
+        try:
+            cursor = conn.execute("""
+                SELECT id, filename, file_path, upload_date, processed, ocr_text, visual_description
+                FROM screenshots
+                WHERE id = ?
+            """, (screenshot_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+        finally:
+            conn.close()
+    
+    def delete_screenshot(self, screenshot_id: str) -> bool:
+        """Delete a screenshot by ID."""
+        conn = self.get_connection()
+        try:
+            cursor = conn.execute("""
+                DELETE FROM screenshots WHERE id = ?
+            """, (screenshot_id,))
+            conn.commit()
+            return cursor.rowcount > 0
+        finally:
+            conn.close()
 
 def init_db():
     """Initialize the database with required tables."""
