@@ -44,19 +44,44 @@ processing_jobs = {}
 @app.on_event("startup")
 async def startup_event():
     """Initialize database and services on startup."""
+    # Ensure required directories exist
+    os.makedirs("static", exist_ok=True)
+    os.makedirs("uploads", exist_ok=True)
+    
+    # Initialize database
     init_db()
+    print("Database initialized successfully")
     print("Visual Memory Search API started successfully")
 
 @app.get("/")
 async def root():
     """Serve the main application."""
     try:
-        return FileResponse("static/index.html")
+        # Check if static/index.html exists
+        if os.path.exists("static/index.html"):
+            return FileResponse("static/index.html")
+        else:
+            print("Warning: static/index.html not found, returning health check response")
+            # Return a simple health check response if static file doesn't exist
+            return JSONResponse(
+                content={
+                    "status": "healthy", 
+                    "service": "Visual Memory Search", 
+                    "version": "1.0.0",
+                    "message": "API is running. Frontend static files not available."
+                },
+                status_code=200
+            )
     except Exception as e:
         print(f"Error serving index.html: {str(e)}")
         # Return a simple health check response if static file fails
         return JSONResponse(
-            content={"status": "healthy", "service": "Visual Memory Search", "version": "1.0.0"},
+            content={
+                "status": "healthy", 
+                "service": "Visual Memory Search", 
+                "version": "1.0.0",
+                "message": "API is running. Error accessing static files."
+            },
             status_code=200
         )
 
@@ -83,7 +108,7 @@ async def upload_screenshots(files: List[UploadFile] = File(...)):
     for file in files:
         try:
             # Validate file type
-            if not file.filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+            if not file.filename or not file.filename.lower().endswith(('.png', '.jpg', '.jpeg')):
                 continue
             
             # Save file immediately
