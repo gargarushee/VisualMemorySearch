@@ -32,7 +32,10 @@ class SearchService:
                     query, query_analysis, screenshot, query_embedding
                 )
                 
-                if score > 0.1:  # Only include reasonably relevant results
+                # Apply stricter filtering based on query type
+                min_threshold = self._get_minimum_threshold(query_analysis, score, screenshot)
+                
+                if score > min_threshold:
                     result = SearchResult(
                         id=screenshot['id'],
                         filename=screenshot['filename'],
@@ -188,6 +191,39 @@ class SearchService:
             'text_to_visual_ratio': len(ocr_text) / max(len(visual_description), 1)
         }
     
+    def _get_minimum_threshold(self, query_analysis: Dict, score: float, screenshot: Dict) -> float:
+        """Get minimum threshold based on query type and screenshot content."""
+        ocr_text = screenshot.get('ocr_text', '').lower()
+        visual_description = screenshot.get('visual_description', '').lower()
+        combined_text = f"{ocr_text} {visual_description}"
+        
+        if query_analysis['is_auth_error_query']:
+            # For auth/error queries, require either:
+            # 1. Actual auth/error terms in the content, OR
+            # 2. Very high similarity score (>0.7)
+            has_auth_content = any(term in combined_text for term in ['auth', 'authentication', 'login', 'password', 'sign in', 'username', 'credential'])
+            has_error_content = any(term in combined_text for term in ['error', 'failed', 'warning', 'alert', 'problem', 'invalid'])
+            
+            # If it has relevant auth/error content, lower threshold
+            if has_auth_content or has_error_content:
+                return 0.2
+            # If it's clearly non-UI content, very high threshold
+            elif any(term in combined_text for term in ['landscape', 'mountain', 'panda', 'cartoon', 'cute', 'kawaii', 'scenic', 'photograph']):
+                return 0.9  # Nearly impossible threshold for irrelevant content
+            else:
+                return 0.6  # Higher threshold for general content
+        
+        elif query_analysis['is_visual_query']:
+            # For visual queries, exclude UI-heavy screenshots
+            ui_indicators = ['button', 'form', 'login', 'interface', 'dialog', 'menu']
+            if any(term in combined_text for term in ui_indicators) and len(ocr_text) > 50:
+                return 0.8  # High threshold for UI content on visual queries
+            else:
+                return 0.1  # Normal threshold for visual content
+        
+        else:
+            return 0.1  # Default threshold
+    
     def _calculate_content_relevance(self, query_analysis: Dict, screenshot_analysis: Dict, ocr_text: str, visual_description: str) -> float:
         """Calculate how well screenshot content matches query intent."""
         
@@ -196,21 +232,29 @@ class SearchService:
             score = 0.0
             combined_text = f"{ocr_text} {visual_description}".lower()
             
-            # High reward for auth+error content
-            if query_analysis['has_auth_terms'] and any(term in combined_text for term in ['auth', 'authentication', 'login', 'password', 'sign in']):
-                score += 0.6
-            if query_analysis['has_error_terms'] and any(term in combined_text for term in ['error', 'warning', 'alert', 'problem', 'failed']):
-                score += 0.6
+            # Strict matching for auth terms
+            auth_terms = ['auth', 'authentication', 'login', 'password', 'sign in', 'username', 'credential']
+            auth_found = any(term in combined_text for term in auth_terms)
             
-            # Heavy penalty for pure nature content when looking for auth errors
-            if screenshot_analysis['has_nature_content'] and screenshot_analysis['ui_count'] == 0:
-                score -= 0.8  # Much stronger penalty
+            # Strict matching for error terms
+            error_terms = ['error', 'failed', 'warning', 'alert', 'problem', 'invalid', 'incorrect']
+            error_found = any(term in combined_text for term in error_terms)
             
-            # Additional bonus if both auth and error terms are found
-            if score > 1.0:
-                score = 1.2  # Super high score for perfect matches
+            if auth_found:
+                score += 0.7
+            if error_found:
+                score += 0.7
             
-            return max(score, 0.0)
+            # Bonus for having both auth and error content
+            if auth_found and error_found:
+                score += 0.5  # Total possible: 1.9
+            
+            # Heavy penalty for clearly irrelevant content
+            irrelevant_terms = ['landscape', 'mountain', 'panda', 'cartoon', 'cute', 'kawaii', 'scenic', 'photograph', 'nature', 'animal']
+            if any(term in combined_text for term in irrelevant_terms):
+                score = 0.0  # Zero out completely irrelevant content
+            
+            return min(score, 1.5)  # Cap at 1.5 for exceptional matches
         
         elif query_analysis['is_visual_query']:
             # For visual queries, heavily penalize UI-heavy screenshots
