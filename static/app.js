@@ -99,6 +99,9 @@ class VisualMemorySearch {
             this.showUploadLoading(true, `Uploading ${validFiles} files...`);
             this.showProgress(true);
             
+            // Animate upload progress from 0 to 50% during upload
+            this.animateProgressTo(50, `Uploading ${validFiles} files...`);
+            
             const response = await fetch('/api/screenshots/upload', {
                 method: 'POST',
                 body: formData
@@ -109,6 +112,8 @@ class VisualMemorySearch {
             if (response.ok) {
                 this.currentJobId = result.job_id;
                 this.showUploadLoading(false);
+                // Quick progress to 60% to show upload complete
+                this.animateProgressTo(60, 'Upload complete, starting processing...');
                 this.showMessage(`Started processing ${validFiles} files`, 'success');
                 this.pollJobProgress(result.job_id);
             } else {
@@ -128,13 +133,20 @@ class VisualMemorySearch {
             const status = await response.json();
 
             if (response.ok) {
-                const percentage = Math.round((status.progress / status.total) * 100);
-                this.updateProgress(percentage, `Processing ${status.progress}/${status.total} files...`);
+                const targetPercentage = Math.round((status.progress / status.total) * 100);
+                
+                // Animate to the target percentage smoothly
+                this.animateProgressTo(targetPercentage, `Processing ${status.progress}/${status.total} files...`);
 
                 if (status.status === 'completed') {
-                    this.showProgress(false);
-                    this.showMessage('All files processed successfully!', 'success');
-                    this.loadLibrary(); // Refresh library
+                    // Animate to 100% before finishing
+                    this.animateProgressTo(100, 'Processing complete!', () => {
+                        setTimeout(() => {
+                            this.showProgress(false);
+                            this.showMessage('All files processed successfully!', 'success');
+                            this.loadLibrary(); // Refresh library
+                        }, 500);
+                    });
                 } else if (status.status === 'failed') {
                     this.showProgress(false);
                     this.showMessage('Processing failed. Please try again.', 'error');
@@ -448,6 +460,36 @@ class VisualMemorySearch {
             uploadZone.classList.remove('uploading');
             uploadLoading.classList.remove('show');
         }
+    }
+
+    animateProgressTo(targetPercentage, text, callback) {
+        const fill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
+        
+        // Get current percentage
+        const currentWidth = parseFloat(fill.style.width) || 0;
+        const difference = targetPercentage - currentWidth;
+        const steps = 20;
+        const stepSize = difference / steps;
+        const stepDuration = 50; // 50ms per step
+        
+        let currentStep = 0;
+        const animate = () => {
+            if (currentStep < steps) {
+                const newPercentage = currentWidth + (stepSize * currentStep);
+                fill.style.width = `${Math.min(100, Math.max(0, newPercentage))}%`;
+                progressText.textContent = text;
+                currentStep++;
+                setTimeout(animate, stepDuration);
+            } else {
+                // Ensure we end at the exact target
+                fill.style.width = `${targetPercentage}%`;
+                progressText.textContent = text;
+                if (callback) callback();
+            }
+        };
+        
+        animate();
     }
 
     showMessage(message, type = 'info') {
