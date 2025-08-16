@@ -63,9 +63,15 @@ class ImageProcessor:
             return "Visual description unavailable (API key not configured)"
         
         try:
-            # Read image file
+            # Read and encode image file
+            import base64
             with open(image_path, 'rb') as image_file:
-                image_data = image_file.read()
+                image_data = base64.b64encode(image_file.read()).decode('utf-8')
+            
+            # Determine media type based on file extension
+            media_type = "image/png"
+            if image_path.lower().endswith(('.jpg', '.jpeg')):
+                media_type = "image/jpeg"
             
             # Prepare the message for Claude
             message = self.anthropic_client.messages.create(
@@ -79,7 +85,7 @@ class ImageProcessor:
                                 "type": "image",
                                 "source": {
                                     "type": "base64",
-                                    "media_type": "image/jpeg",
+                                    "media_type": media_type,
                                     "data": image_data
                                 }
                             },
