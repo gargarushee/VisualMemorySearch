@@ -63,15 +63,32 @@ class ImageProcessor:
             return "Visual description unavailable (API key not configured)"
         
         try:
-            # Read and encode image file
+            # Read and encode image file, detect actual format
             import base64
-            with open(image_path, 'rb') as image_file:
+            from PIL import Image
+            
+            # Open image to detect actual format
+            with Image.open(image_path) as img:
+                # Convert to RGB if needed and save as JPEG for Claude
+                if img.mode not in ('RGB', 'L'):
+                    img = img.convert('RGB')
+                
+                # Save as JPEG temporarily for Claude API
+                import tempfile
+                with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as temp_file:
+                    img.save(temp_file, format='JPEG', quality=95)
+                    temp_path = temp_file.name
+            
+            # Read the JPEG version for Claude
+            with open(temp_path, 'rb') as image_file:
                 image_data = base64.b64encode(image_file.read()).decode('utf-8')
             
-            # Determine media type based on file extension
-            media_type = "image/png"
-            if image_path.lower().endswith(('.jpg', '.jpeg')):
-                media_type = "image/jpeg"
+            # Clean up temp file
+            import os
+            os.unlink(temp_path)
+            
+            # Always use JPEG for Claude API
+            media_type = "image/jpeg"
             
             # Prepare the message for Claude
             message = self.anthropic_client.messages.create(
@@ -154,24 +171,55 @@ Keep the description concise but detailed enough for search purposes."""
             return 0.0
     
     def _create_simple_embedding(self, text: str) -> List[float]:
-        """Create a simple hash-based embedding as fallback."""
-        # This is a very basic fallback - just for demonstration
-        # In production, you'd want a proper embedding model
+        """Create a simple word-based embedding as fallback."""
         import hashlib
+        import re
         
-        # Create a hash of the text
-        text_hash = hashlib.md5(text.lower().encode()).hexdigest()
+        # Normalize text
+        text = text.lower().strip()
         
-        # Convert hash to a 384-dimensional vector
-        embedding = []
-        for i in range(0, len(text_hash), 2):
-            # Convert each pair of hex digits to a float between -1 and 1
+        # Extract important keywords
+        ui_keywords = [
+            'button', 'btn', 'click', 'form', 'input', 'field', 'dialog', 'modal', 
+            'popup', 'error', 'warning', 'alert', 'menu', 'navigation', 'nav',
+            'login', 'sign', 'auth', 'blue', 'red', 'green', 'yellow', 'white',
+            'black', 'cancel', 'submit', 'save', 'delete', 'edit', 'search',
+            'close', 'minimize', 'maximize', 'window', 'tab', 'page', 'screen'
+        ]
+        
+        # Create feature vector based on keyword presence and frequency
+        embedding = [0.0] * 384
+        
+        # Hash-based base embedding
+        text_hash = hashlib.md5(text.encode()).hexdigest()
+        for i in range(0, min(len(text_hash), 32), 2):
             hex_pair = text_hash[i:i+2]
             value = (int(hex_pair, 16) - 127.5) / 127.5
-            embedding.append(value)
+            embedding[i//2] = value
         
-        # Pad or truncate to 384 dimensions
-        while len(embedding) < 384:
-            embedding.extend(embedding[:min(len(embedding), 384 - len(embedding))])
+        # Keyword-based features (more important)
+        words = re.findall(r'\b\w+\b', text)
+        for i, keyword in enumerate(ui_keywords):
+            if i < 300:  # Use positions 50-350 for keywords
+                pos = 50 + i
+                if keyword in text:
+                    # Strong signal for exact keyword match
+                    embedding[pos] = 1.0
+                    # Count occurrences for frequency boost
+                    count = text.count(keyword)
+                    embedding[pos] = min(1.0, count * 0.3)
         
-        return embedding[:384]
+        # Word frequency features
+        word_freq = {}
+        for word in words:
+            if len(word) > 2:  # Only meaningful words
+                word_freq[word] = word_freq.get(word, 0) + 1
+        
+        # Add top frequent words to embedding
+        sorted_words = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)
+        for i, (word, freq) in enumerate(sorted_words[:30]):
+            if 350 + i < 384:
+                pos = 350 + i
+                embedding[pos] = min(1.0, freq * 0.2)
+        
+        return embedding
