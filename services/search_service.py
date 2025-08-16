@@ -63,6 +63,7 @@ class SearchService:
             'urban': ['building', 'city', 'street', 'road', 'architecture', 'urban', 'downtown'],
             'people': ['person', 'people', 'man', 'woman', 'child', 'group', 'face'],
             'objects': ['car', 'vehicle', 'food', 'animal', 'bird', 'cat', 'dog'],
+            'animated': ['character', 'characters', 'animated', 'animation', 'cartoon', 'anime', 'comic', 'mascot', 'emoji', 'avatar', 'bubu', 'chibi', 'cute', 'kawaii'],
             'general_visual': ['picture', 'photo', 'image', 'show', 'display', 'view']
         }
         
@@ -110,6 +111,7 @@ class SearchService:
         """Calculate comprehensive relevance score for a screenshot."""
         ocr_text = screenshot.get('ocr_text', '').lower()
         visual_description = screenshot.get('visual_description', '').lower()
+        filename = screenshot.get('filename', '').lower()
         
         # Base similarity score
         base_score = self.image_processor.calculate_similarity(
@@ -117,11 +119,11 @@ class SearchService:
         )
         
         # Determine content type of screenshot
-        screenshot_analysis = self._analyze_screenshot_content(ocr_text, visual_description)
+        screenshot_analysis = self._analyze_screenshot_content(ocr_text, visual_description, filename)
         
         # Calculate content relevance
         content_score = self._calculate_content_relevance(
-            query_analysis, screenshot_analysis, ocr_text, visual_description
+            query_analysis, screenshot_analysis, ocr_text, visual_description, filename
         )
         
         # Calculate text matching score
@@ -129,32 +131,40 @@ class SearchService:
             query_analysis['query_lower'], ocr_text, visual_description
         )
         
+        # Calculate filename matching score (NEW)
+        filename_score = self._calculate_filename_matching(
+            query_analysis['query_lower'], filename, query_analysis
+        )
+        
         # Weighted final score based on query type
         if query_analysis['is_auth_error_query']:
             # Special handling for auth+error queries - prioritize text content
             final_score = (
-                base_score * 0.3 +           # Moderate weight for general similarity
+                base_score * 0.25 +          # Moderate weight for general similarity
                 content_score * 0.2 +        # Lower weight for visual content
-                text_score * 0.5             # High weight for text matching
+                text_score * 0.45 +          # High weight for text matching
+                filename_score * 0.1         # Small weight for filename
             )
         elif query_analysis['is_visual_query']:
-            # For visual queries, prioritize visual content heavily
+            # For visual queries, prioritize visual content and filename heavily
             final_score = (
-                base_score * 0.2 +           # Lower weight for general similarity
-                content_score * 0.6 +        # High weight for visual content relevance
-                text_score * 0.2             # Lower weight for text matching
+                base_score * 0.15 +          # Lower weight for general similarity
+                content_score * 0.5 +         # High weight for visual content relevance
+                text_score * 0.15 +          # Lower weight for text matching
+                filename_score * 0.2         # Higher weight for filename matching
             )
         else:
             # For text queries, balance all factors
             final_score = (
-                base_score * 0.4 +
-                content_score * 0.3 +
-                text_score * 0.3
+                base_score * 0.3 +
+                content_score * 0.25 +
+                text_score * 0.3 +
+                filename_score * 0.15
             )
         
         return final_score
     
-    def _analyze_screenshot_content(self, ocr_text: str, visual_description: str) -> Dict[str, Any]:
+    def _analyze_screenshot_content(self, ocr_text: str, visual_description: str, filename: str = '') -> Dict[str, Any]:
         """Analyze what type of content is in the screenshot."""
         # UI/Interface indicators
         ui_indicators = ['button', 'form', 'login', 'error', 'dialog', 'menu', 'interface', 'click', 'text field', 'dropdown', 'checkbox', 'authentication', 'password', 'username', 'sign in', 'alert', 'warning']
@@ -163,32 +173,37 @@ class SearchService:
         nature_indicators = ['mountain', 'river', 'lake', 'forest', 'tree', 'landscape', 'nature', 'outdoor', 'scenery', 'beach', 'ocean', 'sea', 'sky', 'sunset', 'sunrise', 'valley', 'peak', 'hill']
         urban_indicators = ['building', 'city', 'street', 'road', 'architecture', 'urban', 'downtown', 'skyscraper']
         people_indicators = ['person', 'people', 'man', 'woman', 'child', 'face', 'group', 'individual']
+        animated_indicators = ['character', 'animated', 'cartoon', 'anime', 'comic', 'mascot', 'emoji', 'avatar', 'bubu', 'chibi', 'cute', 'kawaii', 'animation']
         
-        combined_text = f"{ocr_text} {visual_description}"
+        combined_text = f"{ocr_text} {visual_description} {filename}"
         
         # Count indicators
         ui_count = sum(1 for indicator in ui_indicators if indicator in combined_text)
         nature_count = sum(1 for indicator in nature_indicators if indicator in combined_text)
         urban_count = sum(1 for indicator in urban_indicators if indicator in combined_text)
         people_count = sum(1 for indicator in people_indicators if indicator in combined_text)
+        animated_count = sum(1 for indicator in animated_indicators if indicator in combined_text)
         
         # Determine primary content type
         is_primarily_ui = ui_count > 2 or len(ocr_text) > len(visual_description) * 2
         has_nature_content = nature_count > 0
         has_urban_content = urban_count > 0
         has_people_content = people_count > 0
+        has_animated_content = animated_count > 0
         
         return {
             'is_primarily_ui': is_primarily_ui,
             'has_nature_content': has_nature_content,
             'has_urban_content': has_urban_content,
             'has_people_content': has_people_content,
+            'has_animated_content': has_animated_content,
             'nature_count': nature_count,
             'ui_count': ui_count,
+            'animated_count': animated_count,
             'text_to_visual_ratio': len(ocr_text) / max(len(visual_description), 1)
         }
     
-    def _calculate_content_relevance(self, query_analysis: Dict, screenshot_analysis: Dict, ocr_text: str, visual_description: str) -> float:
+    def _calculate_content_relevance(self, query_analysis: Dict, screenshot_analysis: Dict, ocr_text: str, visual_description: str, filename: str = '') -> float:
         """Calculate how well screenshot content matches query intent."""
         
         # Special handling for auth+error queries
@@ -244,6 +259,20 @@ class SearchService:
                 if screenshot_analysis['has_people_content']:
                     score += 0.8
             
+            # NEW: Handle animated content specifically
+            if 'animated' in query_analysis['visual_categories']:
+                if screenshot_analysis['has_animated_content']:
+                    score += 0.9  # High score for animated content
+                    # Extra bonus for specific animated terms in filename
+                    for term in query_analysis['content_terms']:
+                        if term in filename:
+                            score += 0.3
+                        elif term in visual_description:
+                            score += 0.4
+                else:
+                    # Lower penalty for non-animated content when looking for animations
+                    return 0.3
+            
             return min(score, 1.0)
         
         else:
@@ -297,6 +326,12 @@ class SearchService:
                 matched_elements.append(f"Visual element: {term}")
             elif term in ocr_text:
                 matched_elements.append(f"Text element: {term}")
+        
+        # NEW: Check filename for matches
+        filename = screenshot.get('filename', '').lower()
+        for word in query_lower.split():
+            if len(word) > 2 and word in filename:
+                matched_elements.append(f"Filename match: {word}")
         
         return matched_elements[:5] if matched_elements else ["General content match"]
     
