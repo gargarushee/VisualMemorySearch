@@ -115,7 +115,10 @@ class VisualMemorySearch {
                 // Quick progress to 60% to show upload complete
                 this.animateProgressTo(60, 'Upload complete, starting processing...');
                 this.showMessage(`Started processing ${validFiles} files`, 'success');
-                this.pollJobProgress(result.job_id);
+                // Small delay before starting polling to show the upload complete message
+                setTimeout(() => {
+                    this.pollJobProgress(result.job_id);
+                }, 800);
             } else {
                 throw new Error(result.detail || 'Upload failed');
             }
@@ -133,7 +136,9 @@ class VisualMemorySearch {
             const status = await response.json();
 
             if (response.ok) {
-                const targetPercentage = Math.round((status.progress / status.total) * 100);
+                // Map processing progress from 60% to 100% (instead of 0% to 100%)
+                const processingProgress = status.progress / status.total;
+                const targetPercentage = Math.round(60 + (processingProgress * 40)); // 60% + (0-40%)
                 
                 // Animate to the target percentage smoothly
                 this.animateProgressTo(targetPercentage, `Processing ${status.progress}/${status.total} files...`);
@@ -476,7 +481,7 @@ class VisualMemorySearch {
         let currentStep = 0;
         const animate = () => {
             if (currentStep < steps) {
-                const newPercentage = currentWidth + (stepSize * currentStep);
+                const newPercentage = currentWidth + (stepSize * (currentStep + 1));
                 fill.style.width = `${Math.min(100, Math.max(0, newPercentage))}%`;
                 progressText.textContent = text;
                 currentStep++;
