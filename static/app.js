@@ -401,11 +401,6 @@ class VisualMemorySearch {
     }
 
     async deleteScreenshot(screenshotId, filename) {
-        // Show confirmation dialog
-        if (!confirm(`Are you sure you want to delete "${filename}"? This action cannot be undone.`)) {
-            return;
-        }
-        
         try {
             const response = await fetch(`/api/screenshots/${screenshotId}`, {
                 method: 'DELETE'
