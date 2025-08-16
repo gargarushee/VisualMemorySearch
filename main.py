@@ -44,17 +44,42 @@ processing_jobs = {}
 @app.on_event("startup")
 async def startup_event():
     """Initialize database and services on startup."""
-    # Ensure required directories exist
+    # Fast directory creation
     os.makedirs("static", exist_ok=True)
     os.makedirs("uploads", exist_ok=True)
     
-    # Initialize database
-    init_db()
-    print("Database initialized successfully")
-    print("Visual Memory Search API started successfully")
+    # Initialize database in background to not block health checks
+    asyncio.create_task(initialize_database_async())
+    print("Visual Memory Search API startup initiated")
+
+async def initialize_database_async():
+    """Initialize database asynchronously."""
+    try:
+        # Run database initialization in thread to avoid blocking
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, init_db)
+        print("Database initialized successfully")
+        print("Visual Memory Search API started successfully")
+    except Exception as e:
+        print(f"Database initialization error: {e}")
+        # Continue running even if database init fails
 
 @app.get("/")
 async def root():
+    """Lightweight health check for deployment."""
+    # Always return immediate health response for deployment checks
+    return JSONResponse(
+        content={
+            "status": "healthy", 
+            "service": "Visual Memory Search", 
+            "version": "1.0.0",
+            "timestamp": time.time()
+        },
+        status_code=200
+    )
+
+@app.get("/app")
+async def serve_app():
     """Serve the main application."""
     try:
         # Check if static/index.html exists
