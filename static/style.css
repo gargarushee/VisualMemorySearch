@@ -57,7 +57,7 @@ section {
 .upload-zone {
     border: 3px dashed #e0e6ed;
     border-radius: 8px;
-    padding: 3rem;
+    padding: 2rem;
     text-align: center;
     transition: all 0.3s ease;
     cursor: pointer;
@@ -400,11 +400,12 @@ section {
 .library-actions {
     position: absolute;
     top: 0.5rem;
-    left: 0.5rem;
+    right: 0.5rem;
     display: flex;
     gap: 0.25rem;
     opacity: 0;
     transition: opacity 0.2s ease;
+    z-index: 2;
 }
 
 .library-card:hover .library-actions {
