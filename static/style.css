@@ -79,6 +79,13 @@ section {
     text-align: center;
     transition: all 0.3s ease;
     cursor: pointer;
+    position: relative;
+}
+
+.upload-zone.uploading {
+    border-color: #667eea;
+    background: rgba(102, 126, 234, 0.05);
+    pointer-events: none;
 }
 
 .upload-zone:hover, .upload-zone.drag-over {
@@ -99,6 +106,47 @@ section {
     color: #333;
 }
 
+.upload-loading {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 12px;
+    padding: 2rem;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    z-index: 10;
+}
+
+.upload-loading.show {
+    display: flex;
+}
+
+.upload-spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #e0e6ed;
+    border-top: 4px solid #667eea;
+    border-radius: 50%;
+    animation: uploadSpin 1s linear infinite;
+}
+
+@keyframes uploadSpin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.upload-loading p {
+    color: #667eea;
+    font-weight: 500;
+    margin: 0;
+    font-size: 1rem;
+}
+
 .browse-btn {
     color: #667eea;
     background: none;
@@ -115,6 +163,11 @@ section {
 /* Progress bar */
 .progress-container {
     margin-top: 2rem;
+    transition: opacity 0.3s ease;
+}
+
+.progress-container.uploading {
+    opacity: 1;
 }
 
 .progress-bar {

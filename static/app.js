@@ -39,7 +39,10 @@ class VisualMemorySearch {
         uploadZone.addEventListener('drop', (e) => {
             e.preventDefault();
             uploadZone.classList.remove('drag-over');
-            this.handleFileUpload(e.dataTransfer.files);
+            // Small delay to let the drag-over visual effect complete
+            setTimeout(() => {
+                this.handleFileUpload(e.dataTransfer.files);
+            }, 100);
         });
 
         // Search
@@ -72,6 +75,9 @@ class VisualMemorySearch {
     async handleFileUpload(files) {
         if (!files || files.length === 0) return;
 
+        // Show immediate loading feedback
+        this.showUploadLoading(true, 'Preparing upload...');
+
         const formData = new FormData();
         
         // Validate and add files
@@ -84,11 +90,13 @@ class VisualMemorySearch {
         }
 
         if (validFiles === 0) {
+            this.showUploadLoading(false);
             this.showMessage('No valid image files selected. Please select PNG, JPG, or JPEG files.', 'error');
             return;
         }
 
         try {
+            this.showUploadLoading(true, `Uploading ${validFiles} files...`);
             this.showProgress(true);
             
             const response = await fetch('/api/screenshots/upload', {
@@ -100,6 +108,7 @@ class VisualMemorySearch {
             
             if (response.ok) {
                 this.currentJobId = result.job_id;
+                this.showUploadLoading(false);
                 this.showMessage(`Started processing ${validFiles} files`, 'success');
                 this.pollJobProgress(result.job_id);
             } else {
@@ -107,6 +116,7 @@ class VisualMemorySearch {
             }
         } catch (error) {
             console.error('Upload error:', error);
+            this.showUploadLoading(false);
             this.showMessage(`Upload failed: ${error.message}`, 'error');
             this.showProgress(false);
         }
@@ -423,6 +433,21 @@ class VisualMemorySearch {
         const div = document.createElement('div');
         div.textContent = text;
         return div.innerHTML;
+    }
+
+    showUploadLoading(show, message = 'Preparing upload...') {
+        const uploadZone = document.getElementById('uploadZone');
+        const uploadLoading = document.getElementById('uploadLoading');
+        const loadingText = uploadLoading.querySelector('p');
+        
+        if (show) {
+            uploadZone.classList.add('uploading');
+            uploadLoading.classList.add('show');
+            loadingText.textContent = message;
+        } else {
+            uploadZone.classList.remove('uploading');
+            uploadLoading.classList.remove('show');
+        }
     }
 
     showMessage(message, type = 'info') {
