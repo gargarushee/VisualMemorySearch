@@ -156,7 +156,7 @@ class SearchService:
                         priority = 1.0
                         if 'blue' in pattern_name and 'blue' in query_lower:
                             priority = 2.0  # Higher priority for color+element combos
-                        pattern_matches.append((priority, f"UI: {pattern_name.replace('_', ' ')}")
+                        pattern_matches.append((priority, f"UI: {pattern_name.replace('_', ' ')}"))
                     break
         
         # Sort pattern matches by priority and add to results
