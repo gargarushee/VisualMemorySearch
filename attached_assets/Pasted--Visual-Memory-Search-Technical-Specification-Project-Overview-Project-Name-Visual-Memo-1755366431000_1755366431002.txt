@@ -1,0 +1,356 @@
+# Visual Memory Search - Technical Specification
+
+## Project Overview
+
+**Project Name**: Visual Memory Search  
+**Version**: 1.0.0 (MVP)  
+**Description**: Search your screenshot history using natural language queries for both text content AND visual elements.
+
+## MVP Requirements
+
+### Core Functionality
+- Accept a folder of screenshot images
+- Extract OCR text from images
+- Generate visual descriptions of UI elements and layouts
+- Process natural language search queries
+- Return top 5 most relevant matches with confidence scores
+- Support queries like:
+  - "error message about auth"
+  - "screenshot with blue button" 
+  - "page with login form"
+  - "dialog with cancel button"
+
+### Technical Stack
+
+**Frontend**: TypeScript + React  
+**Backend**: Python + FastAPI  
+**Database**: SQLite (for MVP)  
+**OCR**: Tesseract (pytesseract)  
+**Vision**: OpenAI Vision API or Google Vision API  
+**Search**: Vector similarity search (sentence-transformers)
+
+## Architecture
+
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   Frontend      │    │    Backend       │    │   External      │
+│   (TypeScript)  │───▶│   (FastAPI)      │───▶│   APIs          │
+│                 │    │                  │    │   (Vision/OCR)  │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+                              │
+                              ▼
+                       ┌──────────────────┐
+                       │   SQLite DB      │
+                       │   + Vector Store │
+                       └──────────────────┘
+```
+
+## API Design
+
+### Backend Endpoints
+
+#### 1. Upload Screenshots
+```http
+POST /api/screenshots/upload
+Content-Type: multipart/form-data
+
+Request:
+- files: File[] (screenshot images)
+
+Response:
+{
+  "message": "Successfully processed N screenshots",
+  "processed_count": number,
+  "failed_count": number,
+  "job_id": string
+}
+```
+
+#### 2. Get Processing Status
+```http
+GET /api/screenshots/status/{job_id}
+
+Response:
+{
+  "status": "processing" | "completed" | "failed",
+  "progress": number,
+  "total": number
+}
+```
+
+#### 3. Search Screenshots
+```http
+POST /api/screenshots/search
+Content-Type: application/json
+
+Request:
+{
+  "query": string,
+  "limit": number = 5
+}
+
+Response:
+{
+  "results": [
+    {
+      "id": string,
+      "filename": string,
+      "confidence_score": number,
+      "preview_url": string,
+      "ocr_text": string,
+      "visual_description": string,
+      "matched_elements": string[]
+    }
+  ],
+  "total_searched": number,
+  "query_time_ms": number
+}
+```
+
+#### 4. Get All Screenshots
+```http
+GET /api/screenshots
+
+Response:
+{
+  "screenshots": [
+    {
+      "id": string,
+      "filename": string,
+      "upload_date": string,
+      "processed": boolean,
+      "preview_url": string
+    }
+  ],
+  "total": number
+}
+```
+
+## Database Schema
+
+### screenshots table
+```sql
+CREATE TABLE screenshots (
+    id TEXT PRIMARY KEY,
+    filename TEXT NOT NULL,
+    file_path TEXT NOT NULL,
+    upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    processed BOOLEAN DEFAULT FALSE,
+    ocr_text TEXT,
+    visual_description TEXT,
+    text_embedding BLOB,
+    visual_embedding BLOB,
+    file_size INTEGER,
+    image_width INTEGER,
+    image_height INTEGER
+);
+```
+
+### processing_jobs table
+```sql
+CREATE TABLE processing_jobs (
+    job_id TEXT PRIMARY KEY,
+    status TEXT CHECK(status IN ('processing', 'completed', 'failed')),
+    progress INTEGER DEFAULT 0,
+    total INTEGER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP
+);
+```
+
+## Backend Implementation Details
+
+### Core Components
+
+#### 1. Image Processing Service
+```python
+class ImageProcessor:
+    def extract_text(self, image_path: str) -> str
+    def generate_description(self, image_path: str) -> str
+    def create_embeddings(self, text: str) -> List[float]
+```
+
+#### 2. Search Service  
+```python
+class SearchService:
+    def search_by_text(self, query: str, limit: int) -> List[SearchResult]
+    def search_by_visual(self, query: str, limit: int) -> List[SearchResult]
+    def hybrid_search(self, query: str, limit: int) -> List[SearchResult]
+```
+
+#### 3. File Manager
+```python
+class FileManager:
+    def save_screenshot(self, file: UploadFile) -> str
+    def get_preview_url(self, file_path: str) -> str
+    def cleanup_old_files(self) -> None
+```
+
+### Key Libraries
+```python
+# requirements.txt
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+pillow==10.1.0
+pytesseract==0.3.10
+sentence-transformers==2.2.2
+sqlite3  # built-in
+openai==1.3.0  # for vision API
+numpy==1.24.3
+opencv-python==4.8.1.78
+```
+
+## Frontend Implementation
+
+### Component Structure
+```
+src/
+├── components/
+│   ├── UploadZone.tsx
+│   ├── SearchBar.tsx
+│   ├── SearchResults.tsx
+│   ├── ScreenshotCard.tsx
+│   └── ProgressIndicator.tsx
+├── services/
+│   ├── api.ts
+│   └── types.ts
+├── hooks/
+│   ├── useSearch.ts
+│   └── useUpload.ts
+└── App.tsx
+```
+
+### Key TypeScript Types
+```typescript
+interface Screenshot {
+  id: string;
+  filename: string;
+  upload_date: string;
+  processed: boolean;
+  preview_url: string;
+}
+
+interface SearchResult {
+  id: string;
+  filename: string;
+  confidence_score: number;
+  preview_url: string;
+  ocr_text: string;
+  visual_description: string;
+  matched_elements: string[];
+}
+
+interface SearchRequest {
+  query: string;
+  limit?: number;
+}
+
+interface UploadResponse {
+  message: string;
+  processed_count: number;
+  failed_count: number;
+  job_id: string;
+}
+```
+
+## MVP Limitations & Future Enhancements
+
+### MVP Limitations
+- Single user (no authentication)
+- Local file storage only
+- Basic UI/UX
+- SQLite database
+- Limited to common image formats (PNG, JPG, JPEG)
+- No real-time processing feedback
+- Basic similarity search
+
+### Future Enhancements
+- Multi-user support with authentication
+- Cloud storage integration
+- Advanced visual search (color, layout, UI patterns)
+- Search history and saved queries  
+- Batch operations
+- Mobile app
+- AI-powered query suggestions
+- Screenshot organization/tagging
+- Export search results
+
+## Development Phases
+
+### Phase 1: Backend Core (Week 1-2)
+- [ ] FastAPI setup with basic endpoints
+- [ ] SQLite database setup
+- [ ] Image upload and storage
+- [ ] OCR text extraction
+- [ ] Basic text search
+
+### Phase 2: Vision Integration (Week 2-3)  
+- [ ] Visual description generation
+- [ ] Vector embeddings for search
+- [ ] Hybrid search implementation
+- [ ] Confidence scoring
+
+### Phase 3: Frontend Development (Week 3-4)
+- [ ] React setup with TypeScript
+- [ ] Upload interface
+- [ ] Search interface  
+- [ ] Results display
+- [ ] Progress indicators
+
+### Phase 4: Integration & Testing (Week 4-5)
+- [ ] Frontend-backend integration
+- [ ] Error handling
+- [ ] Performance optimization
+- [ ] User testing
+- [ ] Bug fixes
+
+## Testing Strategy
+
+### Backend Tests
+- Unit tests for image processing functions
+- API endpoint tests
+- Database operation tests
+- Search accuracy tests
+
+### Frontend Tests  
+- Component unit tests
+- Integration tests for API calls
+- E2E tests for core user flows
+
+## Deployment
+
+### Development
+```bash
+# Backend
+cd backend
+pip install -r requirements.txt
+uvicorn main:app --reload --port 8000
+
+# Frontend  
+cd frontend
+npm install
+npm run dev
+```
+
+### Production
+- Docker containers for backend and frontend
+- Nginx for static file serving
+- Environment-based configuration
+- Automated backup for SQLite database
+
+## Performance Considerations
+
+- Image compression for storage optimization
+- Lazy loading for search results
+- Caching for frequently accessed screenshots
+- Background processing for large uploads
+- Database indexing on search fields
+
+## Security Considerations
+
+- File type validation
+- File size limits (max 10MB per image)
+- SQL injection prevention
+- XSS protection for user queries
+- Rate limiting on API endpoints
