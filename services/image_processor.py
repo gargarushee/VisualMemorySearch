@@ -125,14 +125,17 @@ Keep the description concise but detailed enough for search purposes."""
             # Handle Claude API response properly
             try:
                 # Extract text content from the response
-                content = message.content[0]
-                if hasattr(content, 'text'):
-                    return content.text.strip()
-                elif hasattr(content, 'content'):
-                    return str(content.content).strip()
+                if hasattr(message, 'content') and len(message.content) > 0:
+                    content = message.content[0]
+                    # Check if it's a TextBlock with text attribute
+                    if hasattr(content, 'text'):
+                        return content.text.strip()
+                    # Fallback to string conversion
+                    else:
+                        return str(content).strip()
                 else:
-                    # Convert response to string as fallback
-                    return str(content).strip()
+                    print("No content in Claude response")
+                    return "Error: Empty response from visual description service"
             except (IndexError, AttributeError) as e:
                 print(f"Error parsing Claude response: {e}")
                 return "Error: Could not parse visual description response"
