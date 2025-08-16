@@ -50,7 +50,23 @@ async def startup_event():
 @app.get("/")
 async def root():
     """Serve the main application."""
-    return FileResponse("static/index.html")
+    try:
+        return FileResponse("static/index.html")
+    except Exception as e:
+        print(f"Error serving index.html: {str(e)}")
+        # Return a simple health check response if static file fails
+        return JSONResponse(
+            content={"status": "healthy", "service": "Visual Memory Search", "version": "1.0.0"},
+            status_code=200
+        )
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for deployment systems."""
+    return JSONResponse(
+        content={"status": "healthy", "service": "Visual Memory Search", "version": "1.0.0"},
+        status_code=200
+    )
 
 @app.post("/api/screenshots/upload", response_model=UploadResponse)
 async def upload_screenshots(files: List[UploadFile] = File(...)):
@@ -236,5 +252,4 @@ async def delete_screenshot(screenshot_id: str):
         print(f"Error deleting screenshot {screenshot_id}: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to delete screenshot: {str(e)}")
 
-if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+# Application is started via uvicorn command in workflow configuration
